@@ -622,6 +622,19 @@
     animation: scorePop 0.7s ease forwards;
   }
 
+  .tap-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--cell-color);
+    opacity: 0.5;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
   .finish-badge {
     position: absolute;
     top: 8px;
@@ -2163,7 +2176,12 @@ const Game = {
       cell.className = 'player-cell';
       cell.style.setProperty('--cell-color', COLORS[i]);
       cell.style.setProperty('--cell-dim', COLOR_DIMS[i]);
-      if (i === GameState.currentIdx && !p.finished) cell.classList.add('active');
+      const isActive = i === GameState.currentIdx && !p.finished;
+      if (isActive) {
+        cell.classList.add('active');
+        cell.style.cursor = 'pointer';
+        cell.addEventListener('click', missShot);
+      }
 
       const pct = Math.min(100, (p.score / p.target) * 100);
       const avg = p.innings > 0 ? (p.score / p.innings).toFixed(2) : '0.00';
@@ -2171,6 +2189,7 @@ const Game = {
       cell.innerHTML = `
         <div class="active-indicator"></div>
         ${p.finished ? '<div class="finish-badge">완주 ✓</div>' : ''}
+        ${isActive ? '<div class="tap-hint">탭하여 턴 넘기기</div>' : ''}
         <div class="cell-header">
           <span class="cell-order">P${i+1}</span>
           <span class="cell-name">${p.name}</span>
