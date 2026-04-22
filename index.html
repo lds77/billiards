@@ -2514,28 +2514,29 @@ function getAudioCtx() {
   return audioCtx;
 }
 
-function playScore(score) {
-  // 짧은 효과음 먼저
+function playScore(score, isRemaining) {
   const ctx = getAudioCtx();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.connect(gain);
   gain.connect(ctx.destination);
   osc.type = 'sine';
-  osc.frequency.setValueAtTime(1046, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(1318, ctx.currentTime + 0.05);
-  gain.gain.setValueAtTime(0.3, ctx.currentTime);
+  // 남은 점수 모드는 조금 더 긴장감 있는 음
+  const freq = isRemaining ? 1318 : 1046;
+  osc.frequency.setValueAtTime(freq, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(freq * 1.25, ctx.currentTime + 0.05);
+  gain.gain.setValueAtTime(isRemaining ? 0.4 : 0.3, ctx.currentTime);
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
   osc.start(ctx.currentTime);
   osc.stop(ctx.currentTime + 0.12);
 
-  // TTS로 점수 읽기
   if ('speechSynthesis' in window) {
     speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(`${score}점`);
+    const text = isRemaining ? `나머지 ${score}점` : `${score}점`;
+    const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'ko-KR';
     utter.rate = 1.4;
-    utter.pitch = 1.1;
+    utter.pitch = isRemaining ? 1.3 : 1.1;
     utter.volume = 1;
     speechSynthesis.speak(utter);
   }
@@ -2583,7 +2584,12 @@ function addScore() {
     run: p.currentRun
   });
 
-  playScore(p.currentRun);
+  const remaining = p.target - p.score;
+  if (remaining > 0 && remaining <= 3) {
+    playScore(remaining, true);
+  } else {
+    playScore(p.currentRun, false);
+  }
   startTurnTimer();
   animateScorePop(GameState.currentIdx);
   if (hrBroken) showHighrunFlash(p.name, p.currentRun);
