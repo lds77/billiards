@@ -2177,10 +2177,14 @@ const Game = {
       cell.style.setProperty('--cell-color', COLORS[i]);
       cell.style.setProperty('--cell-dim', COLOR_DIMS[i]);
       const isActive = i === GameState.currentIdx && !p.finished;
-      if (isActive) {
-        cell.classList.add('active');
+      if (!p.finished) {
         cell.style.cursor = 'pointer';
-        cell.addEventListener('click', missShot);
+        if (isActive) {
+          cell.classList.add('active');
+          cell.addEventListener('click', addScore);
+        } else {
+          cell.addEventListener('click', missShot);
+        }
       }
 
       const pct = Math.min(100, (p.score / p.target) * 100);
@@ -2189,7 +2193,7 @@ const Game = {
       cell.innerHTML = `
         <div class="active-indicator"></div>
         ${p.finished ? '<div class="finish-badge">완주 ✓</div>' : ''}
-        ${isActive ? '<div class="tap-hint">탭하여 턴 넘기기</div>' : ''}
+        ${isActive ? '<div class="tap-hint">탭 → 득점</div>' : (!p.finished ? '<div class="tap-hint">탭 → 턴 넘기기</div>' : '')}
         <div class="cell-header">
           <span class="cell-order">P${i+1}</span>
           <span class="cell-name">${p.name}</span>
