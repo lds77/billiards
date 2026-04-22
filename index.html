@@ -2583,7 +2583,7 @@ function addScore() {
     run: p.currentRun
   });
 
-  playScore(p.score);
+  playScore(p.currentRun);
   startTurnTimer();
   animateScorePop(GameState.currentIdx);
   if (hrBroken) showHighrunFlash(p.name, p.currentRun);
