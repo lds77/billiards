@@ -2229,6 +2229,55 @@ const Game = {
   }
 };
 
+// ─────────────────── 사운드 ───────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  return audioCtx;
+}
+
+function playScore(run) {
+  const ctx = getAudioCtx();
+  // 연속 득점일수록 음정이 올라감 (최대 5음 올림)
+  const semitones = Math.min(run - 1, 4);
+  const freq = 880 * Math.pow(2, semitones / 12);
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(freq, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(freq * 1.5, ctx.currentTime + 0.06);
+
+  gain.gain.setValueAtTime(0.4, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.25);
+}
+
+function playMiss() {
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(220, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.15);
+
+  gain.gain.setValueAtTime(0.25, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + 0.2);
+}
+
 function addScore() {
   if (GameState.finished) return;
   const p = GameState.players[GameState.currentIdx];
@@ -2253,6 +2302,7 @@ function addScore() {
     run: p.currentRun
   });
 
+  playScore(p.currentRun);
   animateScorePop(GameState.currentIdx);
   if (hrBroken) showHighrunFlash(p.name, p.currentRun);
 
@@ -2316,6 +2366,7 @@ function missShot() {
   if (p.finished) return;
   GameState.pushUndo();
 
+  playMiss();
   GameState.log.push({
     type: 'miss',
     inning: GameState.inning,
