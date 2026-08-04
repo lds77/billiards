@@ -1571,6 +1571,7 @@
     </div>
     <div class="game-inning-box">이닝<strong id="gInning">1</strong></div>
     <div class="game-top-actions">
+      <button class="ic-btn" id="muteBtn" onclick="toggleMute()">🔊</button>
       <button class="ic-btn" onclick="showLog()">📋</button>
       <button class="ic-btn" onclick="confirmExit()">✕</button>
     </div>
@@ -1685,6 +1686,19 @@
   </div>
 </div>
 
+<!-- Overwrite live game confirm -->
+<div class="modal-bg" id="overwriteLiveModal">
+  <div class="modal-box confirm-box">
+    <div class="confirm-ic">⚠️</div>
+    <div class="confirm-t">진행 중인 게임이 있습니다</div>
+    <div class="confirm-d">새 게임을 시작하면 이어하던 게임 기록은<br>저장되지 않고 사라집니다</div>
+    <div class="modal-action-btns">
+      <button class="m-btn m-secondary" onclick="closeModal('overwriteLiveModal'); resumeGame();">이어서 하기</button>
+      <button class="m-btn m-danger" onclick="closeModal('overwriteLiveModal'); actuallyStartGame();">새로 시작</button>
+    </div>
+  </div>
+</div>
+
 <!-- Member picker modal -->
 <div class="modal-bg" id="pickerModal">
   <div class="modal-box">
@@ -1741,7 +1755,7 @@ const COLOR_GLOWS = [
 
 const DEFAULT_TARGETS = { '3쿠션': 20, '4구': 50 };
 const MAX_RECORDS = 100;
-const MAX_UNDO = 10;
+const MAX_UNDO = 50;
 
 // ─────────────────── 저장소 ───────────────────
 const Storage = {
@@ -2064,9 +2078,9 @@ function renderSlots() {
         </div>
         <div class="slot-handi-row">
           <span class="slot-handi-lbl">핸디</span>
-          <input class="slot-handi-input" type="number" min="1" max="999"
+          <input class="slot-handi-input" type="number" min="1" max="999" step="1"
                  value="${slot.target}"
-                 onchange="updateSlotTarget(${i}, this.value)">
+                 onchange="updateSlotTarget(${i}, this)">
           <span class="slot-handi-hint">점 (${suggestedHint})</span>
         </div>
       </div>
@@ -2089,10 +2103,11 @@ function updateSlotName(i, v) {
   }
 }
 
-function updateSlotTarget(i, v) {
-  const n = Math.max(1, Math.min(999, parseInt(v) || DEFAULT_TARGETS[SetupState.mode]));
+function updateSlotTarget(i, el) {
+  const n = Math.max(1, Math.min(999, parseInt(el.value) || DEFAULT_TARGETS[SetupState.mode]));
   SetupState.slots[i].target = n;
   SetupState.slots[i].targetModified = true;
+  el.value = n;
 }
 
 // ─── 회원 선택 모달 ───
@@ -2241,6 +2256,16 @@ function startGame() {
     }
     usedNames.add(s.name);
   }
+
+  const live = Storage.getLive();
+  if (live && live.players && !live.finished) {
+    document.getElementById('overwriteLiveModal').classList.add('show');
+    return;
+  }
+  actuallyStartGame();
+}
+
+function actuallyStartGame() {
   GameState.start(SetupState);
   goScreen('gameScreen');
   Game.render();
@@ -2262,6 +2287,7 @@ const GameState = {
   finished: false,
   finishOrder: [],
   rankedResults: null,
+  savedRecordId: null,
 
   start(setup) {
     this.mode = setup.mode;
@@ -2275,6 +2301,7 @@ const GameState = {
     this.undoStack = [];
     this.log = [];
     this.rankedResults = null;
+    this.savedRecordId = null;
     this.players = setup.slots.slice(0, setup.count).map((s, i) => ({
       idx: i,
       name: s.name,
@@ -2368,6 +2395,29 @@ const GameState = {
       ranked.push({ ...p, rank: finishedIds.length + i + 1 });
     });
     this.rankedResults = ranked;
+
+    if (!this.savedRecordId) {
+      const record = {
+        id: uuid(),
+        mode: this.mode,
+        date: this.startedAt,
+        totalInnings: this.inning,
+        winRule: this.winRule,
+        players: ranked.map(p => ({
+          memberId: p.memberId || null,
+          name: p.name,
+          score: p.score,
+          target: p.target,
+          innings: p.innings,
+          highrun: p.highrun,
+          average: p.innings > 0 ? (p.score / p.innings) : 0,
+          rank: p.rank
+        }))
+      };
+      Storage.addRecord(record);
+      this.savedRecordId = record.id;
+    }
+
     this.save();
   }
 };
@@ -2377,6 +2427,7 @@ const Game = {
   render() {
     document.getElementById('gModeBadge').textContent = GameState.mode;
     document.getElementById('gInning').textContent = GameState.inning;
+    updateMuteBtn();
 
     const area = document.getElementById('playersArea');
     area.className = 'players-area n' + GameState.players.length;
@@ -2394,7 +2445,7 @@ const Game = {
           cell.classList.add('active');
           cell.addEventListener('click', addScore);
         } else {
-          cell.addEventListener('click', missShot);
+          cell.addEventListener('click', tapSkipTurn);
         }
       }
 
@@ -2491,6 +2542,7 @@ function updateTimerUI(remaining) {
 }
 
 function playTimerEnd() {
+  if (isMuted()) return;
   const ctx = getAudioCtx();
   [0, 0.12, 0.24].forEach(t => {
     const osc = ctx.createOscillator();
@@ -2514,7 +2566,24 @@ function getAudioCtx() {
   return audioCtx;
 }
 
+function isMuted() {
+  return localStorage.getItem('billiards_muted') === '1';
+}
+function setMuted(v) {
+  localStorage.setItem('billiards_muted', v ? '1' : '0');
+}
+function toggleMute() {
+  setMuted(!isMuted());
+  if (isMuted() && 'speechSynthesis' in window) speechSynthesis.cancel();
+  updateMuteBtn();
+}
+function updateMuteBtn() {
+  const btn = document.getElementById('muteBtn');
+  if (btn) btn.textContent = isMuted() ? '🔇' : '🔊';
+}
+
 function playScore(score, isRemaining) {
+  if (isMuted()) return;
   const ctx = getAudioCtx();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -2543,6 +2612,7 @@ function playScore(score, isRemaining) {
 }
 
 function playMiss() {
+  if (isMuted()) return;
   const ctx = getAudioCtx();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -2559,6 +2629,8 @@ function playMiss() {
   osc.start(ctx.currentTime);
   osc.stop(ctx.currentTime + 0.2);
 }
+
+let resultModalTimer = null;
 
 function addScore() {
   if (GameState.finished) return;
@@ -2602,7 +2674,7 @@ function addScore() {
     if (GameState.winRule === 'instant') {
       GameState.endGame();
       Game.render();
-      setTimeout(() => showResultModal(), 500);
+      resultModalTimer = setTimeout(showResultModal, 500);
       return;
     }
 
@@ -2611,7 +2683,7 @@ function addScore() {
     if (remaining === 0) {
       GameState.endGame();
       Game.render();
-      setTimeout(() => showResultModal(), 500);
+      resultModalTimer = setTimeout(showResultModal, 500);
       return;
     }
     if (remaining === 1) {
@@ -2620,7 +2692,7 @@ function addScore() {
       last.finished = true;
       GameState.endGame();
       Game.render();
-      setTimeout(() => showResultModal(), 500);
+      resultModalTimer = setTimeout(showResultModal, 500);
       return;
     }
     GameState.nextTurn();
@@ -2670,6 +2742,15 @@ function missShot() {
   startTurnTimer();
 }
 
+function tapSkipTurn() {
+  const from = GameState.players[GameState.currentIdx];
+  missShot();
+  const to = GameState.players[GameState.currentIdx];
+  if (from && to && to.idx !== from.idx) {
+    showToast(`➔ ${to.name} 턴으로 넘어갔습니다`);
+  }
+}
+
 function undoAction() {
   if (GameState.popUndo()) {
     GameState.save();
@@ -2701,6 +2782,8 @@ function showHighrunFlash(name, run) {
 
 // ─────────────────── 결과 모달 ───────────────────
 function showResultModal() {
+  resultModalTimer = null;
+  if (!document.getElementById('gameScreen').classList.contains('active')) return;
   const ranked = GameState.rankedResults || [];
   const winner = ranked[0];
 
@@ -2728,32 +2811,23 @@ function showResultModal() {
   document.getElementById('resultModal').classList.add('show');
 }
 
-function closeResult() { closeModal('resultModal'); }
+function closeResult() {
+  stopTurnTimer();
+  releaseWakeLock();
+  document.getElementById('timerDisplay').style.display = 'none';
+  closeModal('resultModal');
+  if (GameState.savedRecordId) {
+    openRecordDetail(GameState.savedRecordId);
+  } else {
+    goScreen('homeScreen');
+    initHome();
+  }
+}
 
 function saveAndExit() {
   stopTurnTimer();
   releaseWakeLock();
   document.getElementById('timerDisplay').style.display = 'none';
-  const ranked = GameState.rankedResults || [];
-  const record = {
-    id: uuid(),
-    mode: GameState.mode,
-    date: GameState.startedAt,
-    totalInnings: GameState.inning,
-    winRule: GameState.winRule,
-    players: ranked.map(p => ({
-      memberId: p.memberId || null,
-      name: p.name,
-      score: p.score,
-      target: p.target,
-      innings: p.innings,
-      highrun: p.highrun,
-      average: p.innings > 0 ? (p.score / p.innings) : 0,
-      rank: p.rank
-    }))
-  };
-  Storage.addRecord(record);
-  Storage.saveLive(null);
   closeModal('resultModal');
   goScreen('homeScreen');
   initHome();
@@ -2770,6 +2844,7 @@ function confirmExit() {
 function exitGame() {
   stopTurnTimer();
   releaseWakeLock();
+  if (resultModalTimer) { clearTimeout(resultModalTimer); resultModalTimer = null; }
   document.getElementById('timerDisplay').style.display = 'none';
   GameState.save();
   closeModal('exitModal');
