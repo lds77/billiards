@@ -2286,6 +2286,7 @@ const GameState = {
   finished: false,
   finishOrder: [],
   rankedResults: null,
+  savedRecordId: null,
 
   start(setup) {
     this.mode = setup.mode;
@@ -2299,6 +2300,7 @@ const GameState = {
     this.undoStack = [];
     this.log = [];
     this.rankedResults = null;
+    this.savedRecordId = null;
     this.players = setup.slots.slice(0, setup.count).map((s, i) => ({
       idx: i,
       name: s.name,
@@ -2392,6 +2394,29 @@ const GameState = {
       ranked.push({ ...p, rank: finishedIds.length + i + 1 });
     });
     this.rankedResults = ranked;
+
+    if (!this.savedRecordId) {
+      const record = {
+        id: uuid(),
+        mode: this.mode,
+        date: this.startedAt,
+        totalInnings: this.inning,
+        winRule: this.winRule,
+        players: ranked.map(p => ({
+          memberId: p.memberId || null,
+          name: p.name,
+          score: p.score,
+          target: p.target,
+          innings: p.innings,
+          highrun: p.highrun,
+          average: p.innings > 0 ? (p.score / p.innings) : 0,
+          rank: p.rank
+        }))
+      };
+      Storage.addRecord(record);
+      this.savedRecordId = record.id;
+    }
+
     this.save();
   }
 };
@@ -2604,6 +2629,8 @@ function playMiss() {
   osc.stop(ctx.currentTime + 0.2);
 }
 
+let resultModalTimer = null;
+
 function addScore() {
   if (GameState.finished) return;
   const p = GameState.players[GameState.currentIdx];
@@ -2646,7 +2673,7 @@ function addScore() {
     if (GameState.winRule === 'instant') {
       GameState.endGame();
       Game.render();
-      setTimeout(() => showResultModal(), 500);
+      resultModalTimer = setTimeout(showResultModal, 500);
       return;
     }
 
@@ -2655,7 +2682,7 @@ function addScore() {
     if (remaining === 0) {
       GameState.endGame();
       Game.render();
-      setTimeout(() => showResultModal(), 500);
+      resultModalTimer = setTimeout(showResultModal, 500);
       return;
     }
     if (remaining === 1) {
@@ -2664,7 +2691,7 @@ function addScore() {
       last.finished = true;
       GameState.endGame();
       Game.render();
-      setTimeout(() => showResultModal(), 500);
+      resultModalTimer = setTimeout(showResultModal, 500);
       return;
     }
     GameState.nextTurn();
@@ -2754,6 +2781,8 @@ function showHighrunFlash(name, run) {
 
 // ─────────────────── 결과 모달 ───────────────────
 function showResultModal() {
+  resultModalTimer = null;
+  if (!document.getElementById('gameScreen').classList.contains('active')) return;
   const ranked = GameState.rankedResults || [];
   const winner = ranked[0];
 
@@ -2781,32 +2810,23 @@ function showResultModal() {
   document.getElementById('resultModal').classList.add('show');
 }
 
-function closeResult() { closeModal('resultModal'); }
+function closeResult() {
+  stopTurnTimer();
+  releaseWakeLock();
+  document.getElementById('timerDisplay').style.display = 'none';
+  closeModal('resultModal');
+  if (GameState.savedRecordId) {
+    openRecordDetail(GameState.savedRecordId);
+  } else {
+    goScreen('homeScreen');
+    initHome();
+  }
+}
 
 function saveAndExit() {
   stopTurnTimer();
   releaseWakeLock();
   document.getElementById('timerDisplay').style.display = 'none';
-  const ranked = GameState.rankedResults || [];
-  const record = {
-    id: uuid(),
-    mode: GameState.mode,
-    date: GameState.startedAt,
-    totalInnings: GameState.inning,
-    winRule: GameState.winRule,
-    players: ranked.map(p => ({
-      memberId: p.memberId || null,
-      name: p.name,
-      score: p.score,
-      target: p.target,
-      innings: p.innings,
-      highrun: p.highrun,
-      average: p.innings > 0 ? (p.score / p.innings) : 0,
-      rank: p.rank
-    }))
-  };
-  Storage.addRecord(record);
-  Storage.saveLive(null);
   closeModal('resultModal');
   goScreen('homeScreen');
   initHome();
@@ -2823,6 +2843,7 @@ function confirmExit() {
 function exitGame() {
   stopTurnTimer();
   releaseWakeLock();
+  if (resultModalTimer) { clearTimeout(resultModalTimer); resultModalTimer = null; }
   document.getElementById('timerDisplay').style.display = 'none';
   GameState.save();
   closeModal('exitModal');
