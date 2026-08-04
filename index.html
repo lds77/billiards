@@ -1571,6 +1571,7 @@
     </div>
     <div class="game-inning-box">이닝<strong id="gInning">1</strong></div>
     <div class="game-top-actions">
+      <button class="ic-btn" id="muteBtn" onclick="toggleMute()">🔊</button>
       <button class="ic-btn" onclick="showLog()">📋</button>
       <button class="ic-btn" onclick="confirmExit()">✕</button>
     </div>
@@ -1681,6 +1682,19 @@
     <div class="modal-action-btns">
       <button class="m-btn m-secondary" onclick="closeModal('exitModal')">계속하기</button>
       <button class="m-btn m-primary" onclick="exitGame()">종료</button>
+    </div>
+  </div>
+</div>
+
+<!-- Overwrite live game confirm -->
+<div class="modal-bg" id="overwriteLiveModal">
+  <div class="modal-box confirm-box">
+    <div class="confirm-ic">⚠️</div>
+    <div class="confirm-t">진행 중인 게임이 있습니다</div>
+    <div class="confirm-d">새 게임을 시작하면 이어하던 게임 기록은<br>저장되지 않고 사라집니다</div>
+    <div class="modal-action-btns">
+      <button class="m-btn m-secondary" onclick="closeModal('overwriteLiveModal'); resumeGame();">이어서 하기</button>
+      <button class="m-btn m-danger" onclick="closeModal('overwriteLiveModal'); actuallyStartGame();">새로 시작</button>
     </div>
   </div>
 </div>
@@ -2241,6 +2255,16 @@ function startGame() {
     }
     usedNames.add(s.name);
   }
+
+  const live = Storage.getLive();
+  if (live && live.players && !live.finished) {
+    document.getElementById('overwriteLiveModal').classList.add('show');
+    return;
+  }
+  actuallyStartGame();
+}
+
+function actuallyStartGame() {
   GameState.start(SetupState);
   goScreen('gameScreen');
   Game.render();
@@ -2377,6 +2401,7 @@ const Game = {
   render() {
     document.getElementById('gModeBadge').textContent = GameState.mode;
     document.getElementById('gInning').textContent = GameState.inning;
+    updateMuteBtn();
 
     const area = document.getElementById('playersArea');
     area.className = 'players-area n' + GameState.players.length;
@@ -2394,7 +2419,7 @@ const Game = {
           cell.classList.add('active');
           cell.addEventListener('click', addScore);
         } else {
-          cell.addEventListener('click', missShot);
+          cell.addEventListener('click', tapSkipTurn);
         }
       }
 
@@ -2491,6 +2516,7 @@ function updateTimerUI(remaining) {
 }
 
 function playTimerEnd() {
+  if (isMuted()) return;
   const ctx = getAudioCtx();
   [0, 0.12, 0.24].forEach(t => {
     const osc = ctx.createOscillator();
@@ -2514,7 +2540,24 @@ function getAudioCtx() {
   return audioCtx;
 }
 
+function isMuted() {
+  return localStorage.getItem('billiards_muted') === '1';
+}
+function setMuted(v) {
+  localStorage.setItem('billiards_muted', v ? '1' : '0');
+}
+function toggleMute() {
+  setMuted(!isMuted());
+  if (isMuted() && 'speechSynthesis' in window) speechSynthesis.cancel();
+  updateMuteBtn();
+}
+function updateMuteBtn() {
+  const btn = document.getElementById('muteBtn');
+  if (btn) btn.textContent = isMuted() ? '🔇' : '🔊';
+}
+
 function playScore(score, isRemaining) {
+  if (isMuted()) return;
   const ctx = getAudioCtx();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -2543,6 +2586,7 @@ function playScore(score, isRemaining) {
 }
 
 function playMiss() {
+  if (isMuted()) return;
   const ctx = getAudioCtx();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -2668,6 +2712,15 @@ function missShot() {
   GameState.save();
   Game.render();
   startTurnTimer();
+}
+
+function tapSkipTurn() {
+  const from = GameState.players[GameState.currentIdx];
+  missShot();
+  const to = GameState.players[GameState.currentIdx];
+  if (from && to && to.idx !== from.idx) {
+    showToast(`➔ ${to.name} 턴으로 넘어갔습니다`);
+  }
 }
 
 function undoAction() {
