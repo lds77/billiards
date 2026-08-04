@@ -1755,7 +1755,7 @@ const COLOR_GLOWS = [
 
 const DEFAULT_TARGETS = { '3쿠션': 20, '4구': 50 };
 const MAX_RECORDS = 100;
-const MAX_UNDO = 10;
+const MAX_UNDO = 50;
 
 // ─────────────────── 저장소 ───────────────────
 const Storage = {
@@ -2078,9 +2078,9 @@ function renderSlots() {
         </div>
         <div class="slot-handi-row">
           <span class="slot-handi-lbl">핸디</span>
-          <input class="slot-handi-input" type="number" min="1" max="999"
+          <input class="slot-handi-input" type="number" min="1" max="999" step="1"
                  value="${slot.target}"
-                 onchange="updateSlotTarget(${i}, this.value)">
+                 onchange="updateSlotTarget(${i}, this)">
           <span class="slot-handi-hint">점 (${suggestedHint})</span>
         </div>
       </div>
@@ -2103,10 +2103,11 @@ function updateSlotName(i, v) {
   }
 }
 
-function updateSlotTarget(i, v) {
-  const n = Math.max(1, Math.min(999, parseInt(v) || DEFAULT_TARGETS[SetupState.mode]));
+function updateSlotTarget(i, el) {
+  const n = Math.max(1, Math.min(999, parseInt(el.value) || DEFAULT_TARGETS[SetupState.mode]));
   SetupState.slots[i].target = n;
   SetupState.slots[i].targetModified = true;
+  el.value = n;
 }
 
 // ─── 회원 선택 모달 ───
