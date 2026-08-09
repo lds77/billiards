@@ -265,6 +265,13 @@
     margin-bottom: 12px;
   }
 
+  .setup-hint {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-top: 10px;
+  }
+
   .mode-row, .count-row { display: flex; gap: 8px; }
   .chip-btn {
     flex: 1;
@@ -488,6 +495,7 @@
     gap: 1px;
     background: var(--border);
   }
+  .players-area.n1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
   .players-area.n2 { grid-template-columns: 1fr 1fr; }
   .players-area.n3 {
     grid-template-columns: 1fr 1fr;
@@ -571,6 +579,7 @@
     text-shadow: 0 0 30px var(--cell-dim);
   }
 
+  .players-area.n1 .cell-score { font-size: clamp(90px, 26vw, 160px); }
   .players-area.n2 .cell-score { font-size: clamp(70px, 20vw, 120px); }
   .players-area.n3 .cell-score { font-size: clamp(50px, 14vw, 90px); }
   .players-area.n3 .player-cell:first-child .cell-score { font-size: clamp(70px, 18vw, 110px); }
@@ -803,6 +812,21 @@
     padding: 3px 8px;
     border-radius: 6px;
     z-index: 5;
+  }
+
+  .solo-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    z-index: 5;
+    pointer-events: none;
   }
 
   .control-panel {
@@ -1613,13 +1637,17 @@
     <div class="setup-section">
       <div class="setup-label">참여 인원</div>
       <div class="count-row">
+        <button class="chip-btn" data-count="1" onclick="setCount(1)">혼자</button>
         <button class="chip-btn" data-count="2" onclick="setCount(2)">2명</button>
         <button class="chip-btn active" data-count="3" onclick="setCount(3)">3명</button>
         <button class="chip-btn" data-count="4" onclick="setCount(4)">4명</button>
       </div>
+      <div class="setup-hint" id="soloHint" style="display:none">
+        혼자 연습 모드입니다. 승패 없이 에버리지·하이런만 기록되고 승률 통계에는 반영되지 않습니다.
+      </div>
     </div>
 
-    <div class="setup-section">
+    <div class="setup-section" id="winRuleSection">
       <div class="setup-label">승리 규칙</div>
       <div class="win-rule-row">
         <button class="chip-btn active" data-rule="instant" onclick="setWinRule('instant')">1등 나오면 종료</button>
@@ -1683,7 +1711,7 @@
     </div>
     <div class="control-btns">
       <button class="ctrl-main" id="addBtn" onclick="addScore()">+1 득점 </button>
-      <button class="ctrl-miss" onclick="missShot()">공 미스 / 턴 넘기기</button>
+      <button class="ctrl-miss" id="missBtn" onclick="missShot()">공 미스 / 턴 넘기기</button>
     </div>
     <div class="control-sub-btns">
       <button class="ctrl-sub" onclick="subScore()">−1 수정 </button>
@@ -1812,7 +1840,7 @@
 <!-- Result Modal -->
 <div class="modal-bg" id="resultModal">
   <div class="modal-box">
-    <div class="result-trophy">🏆</div>
+    <div class="result-trophy" id="resultTrophy">🏆</div>
     <div class="result-winner-name" id="winnerN">-</div>
     <div class="result-meta" id="resultMeta">-</div>
     <div class="rank-list" id="rankList"></div>
@@ -2027,6 +2055,8 @@ const Stats = {
     );
 
     let totalGames = games.length;
+    let soloGames = 0;   // 혼자 연습 — 무조건 1등이므로 승률 계산에서 제외한다
+    let versusGames = 0;
     let wins = 0;
     let totalScore = 0;
     let totalInnings = 0;
@@ -2035,16 +2065,18 @@ const Stats = {
     let bestAvgGame = null;
 
     const byMode = {
-      '3쿠션': { games: 0, wins: 0, score: 0, innings: 0, hr: 0, bestAvg: 0 },
-      '4구':   { games: 0, wins: 0, score: 0, innings: 0, hr: 0, bestAvg: 0 }
+      '3쿠션': { games: 0, solo: 0, versus: 0, wins: 0, score: 0, innings: 0, hr: 0, bestAvg: 0 },
+      '4구':   { games: 0, solo: 0, versus: 0, wins: 0, score: 0, innings: 0, hr: 0, bestAvg: 0 }
     };
 
     games.forEach(r => {
       const p = r.players.find(pp => pp.memberId === memberId);
       if (!p) return;
-      const isWin = p.rank === 1;
+      const isSolo = r.players.length < 2;
+      const isWin = !isSolo && p.rank === 1;
       totalScore += p.score;
       totalInnings += p.innings;
+      if (isSolo) soloGames++; else versusGames++;
       if (isWin) wins++;
       if (p.highrun > highestHR) highestHR = p.highrun;
       if (p.average > bestAvg) {
@@ -2054,6 +2086,7 @@ const Stats = {
       const m = byMode[r.mode];
       if (m) {
         m.games++;
+        if (isSolo) m.solo++; else m.versus++;
         if (isWin) m.wins++;
         m.score += p.score;
         m.innings += p.innings;
@@ -2063,16 +2096,16 @@ const Stats = {
     });
 
     const overallAvg = totalInnings > 0 ? (totalScore / totalInnings) : 0;
-    const winRate = totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0;
+    const winRate = versusGames > 0 ? Math.round((wins / versusGames) * 100) : 0;
 
     ['3쿠션', '4구'].forEach(mode => {
       const m = byMode[mode];
       m.avg = m.innings > 0 ? (m.score / m.innings) : 0;
-      m.winRate = m.games > 0 ? Math.round((m.wins / m.games) * 100) : 0;
+      m.winRate = m.versus > 0 ? Math.round((m.wins / m.versus) * 100) : 0;
     });
 
     return {
-      totalGames, wins, winRate,
+      totalGames, soloGames, versusGames, wins, winRate,
       overallAvg, highestHR, bestAvg,
       byMode
     };
@@ -2139,6 +2172,7 @@ function initHome() {
   } else {
     list.innerHTML = records.map(r => {
       const winner = r.players.find(p => p.rank === 1);
+      const solo = r.players.length < 2;
       return `
         <div class="recent-item" onclick="openRecordDetail('${r.id}')">
           <div class="recent-item-row">
@@ -2146,9 +2180,9 @@ function initHome() {
             <span class="recent-date">${formatDateShort(r.date)}</span>
           </div>
           <div class="recent-winner">
-            <span class="trophy">🏆</span>${winner ? winner.name : '-'} 승리
+            <span class="trophy">${solo ? '🎯' : '🏆'}</span>${winner ? winner.name : '-'} ${solo ? '연습' : '승리'}
             <span style="color:var(--muted);font-size:11px">
-              (${r.players.length}인 · ${r.totalInnings}이닝)
+              (${solo ? '혼자' : r.players.length + '인'} · ${r.totalInnings}이닝)
             </span>
           </div>
         </div>
@@ -2202,6 +2236,7 @@ function initSetup() {
   document.querySelectorAll('[data-timer]').forEach(b => {
     b.classList.toggle('active', parseInt(b.dataset.timer) === 0);
   });
+  applySoloUI();
   renderSlots();
 }
 
@@ -2232,7 +2267,21 @@ function setCount(n) {
   document.querySelectorAll('[data-count]').forEach(b => {
     b.classList.toggle('active', parseInt(b.dataset.count) === n);
   });
+  applySoloUI();
   renderSlots();
+}
+
+// 혼자 연습일 땐 승리 규칙이 의미가 없으므로 숨기고 '목표 도달 시 종료'로 고정한다
+function applySoloUI() {
+  const solo = SetupState.count === 1;
+  document.getElementById('soloHint').style.display = solo ? 'block' : 'none';
+  document.getElementById('winRuleSection').style.display = solo ? 'none' : '';
+  if (solo) {
+    SetupState.winRule = 'instant';
+    document.querySelectorAll('[data-rule]').forEach(b => {
+      b.classList.toggle('active', b.dataset.rule === 'instant');
+    });
+  }
 }
 
 function setWinRule(r) {
@@ -2346,7 +2395,7 @@ function renderPickerList() {
         <div>
           <div class="picker-item-name">${m.name}${used ? ' (이미 선택됨)' : ''}</div>
           <div class="picker-item-stats">
-            ${stats.totalGames}게임 · 통산 AVG ${stats.overallAvg.toFixed(2)} · 승률 ${stats.winRate}%
+            ${stats.totalGames}게임 · 통산 AVG ${stats.overallAvg.toFixed(2)} · 승률 ${stats.versusGames > 0 ? stats.winRate + '%' : '-'}
           </div>
         </div>
         ${selected ? '<div class="picker-item-check">✓</div>' : ''}
@@ -2594,6 +2643,14 @@ const Game = {
     area.className = 'players-area n' + GameState.players.length;
     area.innerHTML = '';
 
+    // 혼자 연습에서는 '턴 넘기기'가 아니라 이닝을 넘기는 동작이다
+    const missBtn = document.getElementById('missBtn');
+    if (missBtn) {
+      missBtn.textContent = GameState.players.length === 1
+        ? '공 미스 / 다음 이닝'
+        : '공 미스 / 턴 넘기기';
+    }
+
     GameState.players.forEach((p, i) => {
       const cell = document.createElement('div');
       cell.className = 'player-cell';
@@ -2617,6 +2674,7 @@ const Game = {
         <div class="active-indicator"></div>
         ${p.finished ? '<div class="finish-badge">완주 ✓</div>' : ''}
         ${isActive ? '<div class="tap-hint">탭 → 득점</div>' : (!p.finished ? '<div class="tap-hint">탭 → 턴 넘기기</div>' : '')}
+        ${GameState.players.length === 1 ? '<div class="solo-badge">연습</div>' : ''}
         <div class="cell-header">
           <span class="cell-order">P${i+1}</span>
           <span class="cell-name">${p.name}</span>
@@ -2952,8 +3010,12 @@ function showHighrunFlash(name, run) {
 function showResultModal() {
   const ranked = GameState.rankedResults || [];
   const winner = ranked[0];
+  const solo = GameState.players.length === 1;
 
-  document.getElementById('winnerN').textContent = winner ? `${winner.name} 승리!` : '게임 종료';
+  document.getElementById('resultTrophy').textContent = solo ? '🎯' : '🏆';
+  document.getElementById('winnerN').textContent = !winner
+    ? '게임 종료'
+    : (solo ? `${winner.name} 연습 완료` : `${winner.name} 승리!`);
   document.getElementById('resultMeta').textContent =
     `${GameState.mode} · ${GameState.inning}이닝 · ${formatDate(GameState.startedAt)}`;
 
@@ -3122,7 +3184,7 @@ function renderMembers() {
           <div class="member-name">${m.name}</div>
           <div class="member-stats">
             <span><span class="member-stat-val">${stats.totalGames}</span>게임</span>
-            <span><span class="member-stat-val">${stats.winRate}%</span>승률</span>
+            <span><span class="member-stat-val">${stats.versusGames > 0 ? stats.winRate + '%' : '-'}</span>승률</span>
             <span>AVG <span class="member-stat-val">${stats.overallAvg.toFixed(2)}</span></span>
             <span>HR <span class="member-stat-val">${stats.highestHR}</span></span>
           </div>
@@ -3240,7 +3302,7 @@ function renderRecords() {
     return `
       <div class="record-card" onclick="openRecordDetail('${r.id}')">
         <div class="record-head">
-          <span class="record-mode-badge">${r.mode}</span>
+          <span class="record-mode-badge">${r.mode}${r.players.length < 2 ? ' 연습' : ''}</span>
           <span class="record-head-right">
             <span class="record-date-s">${formatDateShort(r.date)}</span>
             <button class="record-del" title="이 기록 삭제"
@@ -3301,8 +3363,8 @@ function openRecordDetail(id) {
   const body = document.getElementById('recordDetailBody');
   body.innerHTML = `
     <div class="rd-summary">
-      <div class="rd-mode-date">${record.mode} · ${formatDate(record.date)} · ${record.totalInnings}이닝</div>
-      <div class="rd-winner-name">🏆 ${winner ? winner.name : '-'}</div>
+      <div class="rd-mode-date">${record.mode} · ${formatDate(record.date)} · ${record.totalInnings}이닝${record.players.length < 2 ? ' · 혼자 연습' : ''}</div>
+      <div class="rd-winner-name">${record.players.length < 2 ? '🎯' : '🏆'} ${winner ? winner.name : '-'}</div>
     </div>
     <div class="setup-label" style="padding-left:4px;margin-bottom:10px">최종 순위</div>
     <div class="rank-list">
@@ -3395,7 +3457,7 @@ function renderPersonalStats(members) {
           <div class="stats-mode-val">${m.avg.toFixed(2)}</div>
         </div>
         <div style="font-size:10px;color:var(--muted);padding-left:60px;margin-top:-4px;margin-bottom:4px">
-          ${m.games}게임 · 승률 ${m.winRate}% · HR ${m.hr}
+          ${m.games}게임${m.solo ? ` (연습 ${m.solo})` : ''} · 승률 ${m.versus > 0 ? m.winRate + '%' : '-'} · HR ${m.hr}
         </div>
       `;
     }).join('');
