@@ -88,10 +88,11 @@
   .home-date { font-size: 11px; color: var(--muted); margin-top: 12px; }
 
   .resume-card {
+    position: relative;
     background: linear-gradient(135deg, var(--p1-dim), transparent);
     border: 1px solid var(--p1);
     border-radius: 16px;
-    padding: 18px;
+    padding: 18px 52px 18px 18px;   /* 오른쪽은 삭제 버튼 자리 */
     margin-bottom: 20px;
     display: none;
     cursor: pointer;
@@ -99,6 +100,22 @@
   }
   .resume-card.show { display: block; }
   .resume-card:active { transform: scale(0.98); }
+  .resume-del {
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .resume-del:active { background: var(--red); border-color: var(--red); color: #fff; }
   .resume-label {
     font-size: 11px; color: var(--p1);
     letter-spacing: 2px; font-weight: 700; margin-bottom: 6px;
@@ -1499,6 +1516,8 @@
   </div>
 
   <div class="resume-card" id="resumeCard" onclick="resumeGame()">
+    <button class="resume-del" title="진행 중인 게임 삭제"
+            onclick="event.stopPropagation(); askDeleteLive();">✕</button>
     <div class="resume-label">▶ 진행 중인 게임</div>
     <div class="resume-title" id="resumeTitle">게임 이어하기</div>
     <div class="resume-meta" id="resumeMeta"></div>
@@ -1789,7 +1808,23 @@
     <div class="confirm-d">진행 중인 게임은 자동 저장되어<br>다음에 이어서 할 수 있습니다</div>
     <div class="modal-action-btns">
       <button class="m-btn m-secondary" onclick="closeModal('exitModal')">계속하기</button>
-      <button class="m-btn m-primary" onclick="exitGame()">종료</button>
+      <button class="m-btn m-primary" onclick="exitGame()">저장 후 종료</button>
+    </div>
+    <div style="margin-top:8px">
+      <button class="m-btn m-danger" style="width:100%" onclick="discardGame()">이 게임 삭제하고 종료</button>
+    </div>
+  </div>
+</div>
+
+<!-- 진행 중인 게임 삭제 확인 -->
+<div class="modal-bg" id="deleteLiveModal">
+  <div class="modal-box confirm-box">
+    <div class="confirm-ic">🗑️</div>
+    <div class="confirm-t">진행 중인 게임을 삭제할까요?</div>
+    <div class="confirm-d">아직 저장하지 않은 점수와 진행 내용이<br>모두 사라집니다</div>
+    <div class="modal-action-btns">
+      <button class="m-btn m-secondary" onclick="closeModal('deleteLiveModal')">취소</button>
+      <button class="m-btn m-danger" onclick="deleteLiveGame()">삭제</button>
     </div>
   </div>
 </div>
@@ -2967,6 +3002,35 @@ function exitGame() {
   initHome();
 }
 
+// 진행 중인 게임을 저장하지 않고 통째로 버린다.
+// players를 비워야 visibilitychange 등에서 다시 저장되어 되살아나지 않는다.
+function discardGame() {
+  stopTurnTimer();
+  releaseWakeLock();
+  document.getElementById('timerDisplay').style.display = 'none';
+  Storage.saveLive(null);
+  GameState.players = [];
+  GameState.log = [];
+  GameState.finished = false;
+  closeModal('exitModal');
+  goScreen('homeScreen');
+  initHome();
+  showToast('진행 중인 게임을 삭제했습니다');
+}
+
+function askDeleteLive() {
+  document.getElementById('deleteLiveModal').classList.add('show');
+}
+
+function deleteLiveGame() {
+  Storage.saveLive(null);
+  GameState.players = [];
+  GameState.log = [];
+  closeModal('deleteLiveModal');
+  initHome();
+  showToast('진행 중인 게임을 삭제했습니다');
+}
+
 // ─────────────────── 로그 화면 ───────────────────
 function showLog() {
   const body = document.getElementById('logBody');
@@ -3545,6 +3609,51 @@ document.addEventListener('visibilitychange', () => {
     GameState.save();
   }
 });
+
+// ─────────────────── 뒤로가기 처리 ───────────────────
+// 히스토리에 더미 항목을 항상 하나 유지해 두고, 뒤로가기가 들어오면
+// 페이지를 벗어나는 대신 앱 안에서 한 단계 위로 올라간다.
+// (처리할 때마다 항목을 다시 채우므로 히스토리가 늘어나지 않는다)
+let lastHomeBack = 0;
+
+function pushNavGuard() {
+  try { history.pushState({ billiardsNav: true }, ''); } catch (e) {}
+}
+
+function handleBackPress() {
+  // 1) 열린 모달이 있으면 모달부터 닫는다
+  const modals = document.querySelectorAll('.modal-bg.show');
+  if (modals.length) {
+    pushNavGuard();
+    modals.forEach(m => m.classList.remove('show'));
+    pendingImport = null;
+    return;
+  }
+
+  const active = document.querySelector('.screen.active');
+  const id = active ? active.id : 'homeScreen';
+
+  // 2) 게임 중에는 바로 나가지 않고 종료 확인을 띄운다
+  if (id === 'gameScreen') { pushNavGuard(); confirmExit(); return; }
+
+  // 3) 기록 상세 → 기록 목록
+  if (id === 'recordDetailScreen') { pushNavGuard(); openRecordsScreen(); return; }
+
+  // 4) 나머지 하위 화면 → 홈
+  if (id !== 'homeScreen') { pushNavGuard(); goScreen('homeScreen'); initHome(); return; }
+
+  // 5) 홈에서는 두 번 눌러야 실제로 앱을 벗어난다
+  if (Date.now() - lastHomeBack < 2000) {
+    setTimeout(() => history.back(), 0);
+    return;
+  }
+  lastHomeBack = Date.now();
+  pushNavGuard();
+  showToast('뒤로가기를 한 번 더 누르면 종료됩니다');
+}
+
+window.addEventListener('popstate', handleBackPress);
+pushNavGuard();
 
 // ─────────────────── 초기화 ───────────────────
 initHome();
