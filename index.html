@@ -1281,6 +1281,28 @@
     letter-spacing: 1px;
   }
   .record-date-s { font-size: 11px; color: var(--muted); }
+  .record-head-right { display: flex; align-items: center; gap: 8px; }
+  .record-del {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .record-del:active { background: var(--red); border-color: var(--red); color: #fff; }
+  .nav-del-btn {
+    background: transparent;
+    border: 1px solid var(--red);
+    color: var(--red);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
   .record-players {
     display: flex;
     flex-direction: column;
@@ -1708,6 +1730,7 @@
       <button class="back-btn" onclick="openRecordsScreen()">←</button>
       <div class="nav-title">GAME DETAIL</div>
     </div>
+    <button class="nav-del-btn" onclick="askDeleteRecord(currentDetailId)">🗑 삭제</button>
   </div>
   <div class="page-body" id="recordDetailBody"></div>
 </div>
@@ -1812,6 +1835,19 @@
     </div>
     <div style="margin-top:8px">
       <button class="m-btn m-danger" style="width:100%" onclick="discardGame()">이 게임 삭제하고 종료</button>
+    </div>
+  </div>
+</div>
+
+<!-- 저장된 기록 삭제 확인 -->
+<div class="modal-bg" id="delRecordModal">
+  <div class="modal-box confirm-box">
+    <div class="confirm-ic">🗑️</div>
+    <div class="confirm-t">이 기록을 삭제할까요?</div>
+    <div class="confirm-d" id="delRecordText">-</div>
+    <div class="modal-action-btns">
+      <button class="m-btn m-secondary" onclick="cancelDeleteRecord()">취소</button>
+      <button class="m-btn m-danger" onclick="confirmDeleteRecord()">삭제</button>
     </div>
   </div>
 </div>
@@ -3205,7 +3241,11 @@ function renderRecords() {
       <div class="record-card" onclick="openRecordDetail('${r.id}')">
         <div class="record-head">
           <span class="record-mode-badge">${r.mode}</span>
-          <span class="record-date-s">${formatDateShort(r.date)}</span>
+          <span class="record-head-right">
+            <span class="record-date-s">${formatDateShort(r.date)}</span>
+            <button class="record-del" title="이 기록 삭제"
+                    onclick="event.stopPropagation(); askDeleteRecord('${r.id}');">🗑</button>
+          </span>
         </div>
         <div class="record-players">${playersHtml}</div>
       </div>
@@ -3213,9 +3253,46 @@ function renderRecords() {
   }).join('');
 }
 
+let currentDetailId = null;
+let recordToDelete = null;
+
+function askDeleteRecord(id) {
+  const record = Storage.getRecords().find(r => r.id === id);
+  if (!record) return;
+  recordToDelete = id;
+  const names = [...record.players].sort((a, b) => a.rank - b.rank).map(p => p.name).join(' vs ');
+  document.getElementById('delRecordText').innerHTML =
+    `${record.mode} · ${formatDate(record.date)}<br>${names}<br><br>삭제하면 통계에서도 빠집니다`;
+  document.getElementById('delRecordModal').classList.add('show');
+}
+
+function cancelDeleteRecord() {
+  recordToDelete = null;
+  closeModal('delRecordModal');
+}
+
+function confirmDeleteRecord() {
+  if (!recordToDelete) return;
+  const deleted = recordToDelete;
+  Storage.saveRecords(Storage.getRecords().filter(r => r.id !== deleted));
+  recordToDelete = null;
+  closeModal('delRecordModal');
+
+  // 상세 화면에서 지웠으면 목록으로 빠져나온다
+  const active = document.querySelector('.screen.active');
+  if (active && active.id === 'recordDetailScreen') {
+    currentDetailId = null;
+    openRecordsScreen();
+  } else {
+    renderRecords();
+  }
+  showToast('기록을 삭제했습니다');
+}
+
 function openRecordDetail(id) {
   const record = Storage.getRecords().find(r => r.id === id);
   if (!record) return;
+  currentDetailId = id;
   goScreen('recordDetailScreen');
 
   const sorted = [...record.players].sort((a, b) => a.rank - b.rank);
@@ -3627,6 +3704,8 @@ function handleBackPress() {
     pushNavGuard();
     modals.forEach(m => m.classList.remove('show'));
     pendingImport = null;
+    recordToDelete = null;
+    memberToDelete = null;
     return;
   }
 
