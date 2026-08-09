@@ -1776,6 +1776,10 @@
       <button class="stats-tab active" id="tabPersonal" onclick="switchStatsTab('personal')">개인 통계</button>
       <button class="stats-tab" id="tabH2H" onclick="switchStatsTab('h2h')">상대 전적</button>
     </div>
+    <div class="filter-row" id="statsModeFilter">
+      <button class="filter-chip active" data-smode="3쿠션" onclick="setStatsMode('3쿠션')">3쿠션</button>
+      <button class="filter-chip" data-smode="4구" onclick="setStatsMode('4구')">4구</button>
+    </div>
     <div id="statsPersonal"></div>
     <div id="statsH2H" style="display:none;"></div>
   </div>
@@ -2108,6 +2112,7 @@ const Stats = {
 
     return {
       totalGames, soloGames, versusGames, wins, winRate,
+      // 아래 셋은 3쿠션+4구를 합친 값이라 화면에 그대로 쓰면 안 된다. 표시는 byMode를 쓸 것.
       overallAvg, highestHR, bestAvg,
       byMode
     };
@@ -2122,10 +2127,12 @@ const Stats = {
     return Math.max(1, suggested);
   },
 
-  getH2H(idA, idB) {
+  // 3쿠션과 4구는 별개의 종목이라 전적도 모드별로만 센다
+  getH2H(idA, idB, mode) {
     const records = Storage.getRecords();
     let winsA = 0, winsB = 0, total = 0;
     records.forEach(r => {
+      if (mode && r.mode !== mode) return;
       const pA = r.players.find(p => p.memberId === idA);
       const pB = r.players.find(p => p.memberId === idB);
       if (!pA || !pB) return;
@@ -2136,12 +2143,12 @@ const Stats = {
     return { total, winsA, winsB };
   },
 
-  getAllH2HPairs() {
+  getAllH2HPairs(mode) {
     const members = Storage.getMembers();
     const pairs = [];
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
-        const h2h = this.getH2H(members[i].id, members[j].id);
+        const h2h = this.getH2H(members[i].id, members[j].id, mode);
         if (h2h.total > 0) pairs.push({ a: members[i], b: members[j], ...h2h });
       }
     }
@@ -2397,7 +2404,12 @@ function renderPickerList() {
         <div>
           <div class="picker-item-name">${m.name}${used ? ' (이미 선택됨)' : ''}</div>
           <div class="picker-item-stats">
-            ${stats.totalGames}게임 · 통산 AVG ${stats.overallAvg.toFixed(2)} · 승률 ${stats.versusGames > 0 ? stats.winRate + '%' : '-'}
+            ${(() => {
+              // 지금 만들려는 게임의 모드 기준으로 보여줘야 핸디캡 정하는 데 쓸모가 있다
+              const b = stats.byMode[SetupState.mode];
+              if (!b || b.games === 0) return `${SetupState.mode} 기록 없음`;
+              return `${SetupState.mode} ${b.games}게임 · AVG ${b.avg.toFixed(2)} · 승률 ${b.versus > 0 ? b.winRate + '%' : '-'}`;
+            })()}
           </div>
         </div>
         ${selected ? '<div class="picker-item-check">✓</div>' : ''}
@@ -3200,9 +3212,12 @@ function renderMembers() {
           <div class="member-name">${m.name}</div>
           <div class="member-stats">
             <span><span class="member-stat-val">${stats.totalGames}</span>게임</span>
-            <span><span class="member-stat-val">${stats.versusGames > 0 ? stats.winRate + '%' : '-'}</span>승률</span>
-            <span>AVG <span class="member-stat-val">${stats.overallAvg.toFixed(2)}</span></span>
-            <span>HR <span class="member-stat-val">${stats.highestHR}</span></span>
+            ${['3쿠션', '4구'].map(mode => {
+              // 모드별 에버를 따로 보여준다 (섞으면 4구 때문에 숫자가 의미를 잃는다)
+              const b = stats.byMode[mode];
+              if (b.games === 0) return '';
+              return `<span>${mode} <span class="member-stat-val">${b.avg.toFixed(2)}</span></span>`;
+            }).join('')}
           </div>
         </div>
         <button class="member-del-btn" onclick="askDeleteMember('${m.id}', '${m.name.replace(/'/g, "\\'")}')">✕</button>
@@ -3412,6 +3427,18 @@ function openStatsScreen() {
 }
 
 let currentStatsTab = 'personal';
+// 3쿠션과 4구는 에버 수준 자체가 달라 한 덩어리로 묶으면 아무 의미가 없다.
+// 통계 화면 전체를 선택한 모드 기준으로만 보여준다.
+let statsMode = '3쿠션';
+
+function setStatsMode(mode) {
+  statsMode = mode;
+  document.querySelectorAll('[data-smode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.smode === mode);
+  });
+  renderPersonalStats(Storage.getMembers());
+  renderH2HStats();
+}
 
 function switchStatsTab(tab) {
   currentStatsTab = tab;
@@ -3424,6 +3451,9 @@ function switchStatsTab(tab) {
 function renderStats() {
   const members = Storage.getMembers();
   switchStatsTab(currentStatsTab);
+  document.querySelectorAll('[data-smode]').forEach(b => {
+    b.classList.toggle('active', b.dataset.smode === statsMode);
+  });
   renderPersonalStats(members);
   renderH2HStats();
 }
@@ -3442,74 +3472,74 @@ function renderPersonalStats(members) {
     return;
   }
 
-  const withStats = members.map(m => ({ member: m, stats: Stats.getMemberStats(m.id) }))
-    .filter(x => x.stats.totalGames > 0)
-    .sort((a, b) => b.stats.totalGames - a.stats.totalGames);
+  const other = statsMode === '3쿠션' ? '4구' : '3쿠션';
+  const withStats = members
+    .map(m => ({ member: m, stats: Stats.getMemberStats(m.id) }))
+    .map(x => ({ ...x, mode: x.stats.byMode[statsMode] }))
+    .filter(x => x.mode.games > 0)
+    .sort((a, b) => b.mode.games - a.mode.games);
 
   if (withStats.length === 0) {
     el.innerHTML = `
       <div class="empty-state">
         <div class="empty-ic">📊</div>
-        <div class="empty-t">집계된 통계가 없습니다</div>
-        <div class="empty-d">회원과 연결된 게임을 진행해보세요</div>
+        <div class="empty-t">${statsMode} 기록이 없습니다</div>
+        <div class="empty-d">회원과 연결된 ${statsMode} 게임을 진행해보세요</div>
       </div>
     `;
     return;
   }
 
-  const maxAvg = Math.max(...withStats.map(x => x.stats.overallAvg));
+  // 막대는 선택한 모드 안에서만 비교한다 (모드가 섞이면 4구가 항상 꽉 찬다)
+  const maxAvg = Math.max(...withStats.map(x => x.mode.avg));
 
-  el.innerHTML = withStats.map(({ member, stats }) => {
-    const modes = ['3쿠션', '4구'];
-    const modeRows = modes.map(mode => {
-      const m = stats.byMode[mode];
-      const barPct = maxAvg > 0 ? Math.min(100, (m.avg / maxAvg) * 100) : 0;
-      return `
-        <div class="stats-mode-row">
-          <div class="stats-mode-label">${mode}</div>
-          <div class="stats-mode-bar">
-            <div class="stats-mode-bar-fill" style="width:${barPct}%"></div>
-          </div>
-          <div class="stats-mode-val">${m.avg.toFixed(2)}</div>
-        </div>
-        <div style="font-size:10px;color:var(--muted);padding-left:60px;margin-top:-4px;margin-bottom:4px">
-          ${m.games}게임${m.solo ? ` (연습 ${m.solo})` : ''} · 승률 ${m.versus > 0 ? m.winRate + '%' : '-'} · HR ${m.hr}
-        </div>
-      `;
-    }).join('');
-
+  el.innerHTML = withStats.map(({ member, stats, mode: m }) => {
+    const o = stats.byMode[other];
+    const barPct = maxAvg > 0 ? Math.min(100, (m.avg / maxAvg) * 100) : 0;
     return `
       <div class="stats-member-card">
         <div class="stats-mh">
           <div class="stats-avatar">${getInitial(member.name)}</div>
           <div class="stats-mname">${member.name}</div>
-          <div class="stats-mgames">${stats.totalGames}게임</div>
+          <div class="stats-mgames">${statsMode} ${m.games}게임</div>
         </div>
         <div class="stats-grid">
           <div class="stats-box hl">
-            <div class="stats-box-label">통산 AVG</div>
-            <div class="stats-box-val">${stats.overallAvg.toFixed(2)}</div>
+            <div class="stats-box-label">${statsMode} AVG</div>
+            <div class="stats-box-val">${m.avg.toFixed(2)}</div>
             <div class="stats-box-sub">평균 이닝당 득점</div>
           </div>
           <div class="stats-box gold">
             <div class="stats-box-label">Best HR</div>
-            <div class="stats-box-val">${stats.highestHR}</div>
+            <div class="stats-box-val">${m.hr}</div>
             <div class="stats-box-sub">최고 하이런</div>
           </div>
           <div class="stats-box">
             <div class="stats-box-label">승률</div>
-            <div class="stats-box-val">${stats.winRate}<span style="font-size:14px">%</span></div>
-            <div class="stats-box-sub">${stats.wins}승 / ${stats.totalGames}게임</div>
+            <div class="stats-box-val">${m.versus > 0 ? m.winRate : '-'}${m.versus > 0 ? '<span style="font-size:14px">%</span>' : ''}</div>
+            <div class="stats-box-sub">${m.versus > 0 ? `${m.wins}승 / ${m.versus}게임` : '대전 기록 없음'}</div>
           </div>
           <div class="stats-box">
             <div class="stats-box-label">Best AVG</div>
-            <div class="stats-box-val">${stats.bestAvg.toFixed(2)}</div>
+            <div class="stats-box-val">${m.bestAvg.toFixed(2)}</div>
             <div class="stats-box-sub">단일 게임 최고</div>
           </div>
         </div>
         <div class="stats-mode-section">
-          <div class="stats-mode-title">모드별 평균 이닝당 득점</div>
-          ${modeRows}
+          <div class="stats-mode-title">${statsMode} 상세</div>
+          <div class="stats-mode-row">
+            <div class="stats-mode-label">${statsMode}</div>
+            <div class="stats-mode-bar">
+              <div class="stats-mode-bar-fill" style="width:${barPct}%"></div>
+            </div>
+            <div class="stats-mode-val">${m.avg.toFixed(2)}</div>
+          </div>
+          <div style="font-size:10px;color:var(--muted);padding-left:60px;margin-top:6px">
+            총 ${m.score}점 / ${m.innings}이닝${m.solo ? ` · 혼자 연습 ${m.solo}게임` : ''}
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:8px">
+            ${o.games > 0 ? `${other}: ${o.games}게임 · AVG ${o.avg.toFixed(2)} · HR ${o.hr}` : `${other} 기록 없음`}
+          </div>
         </div>
       </div>
     `;
@@ -3518,14 +3548,14 @@ function renderPersonalStats(members) {
 
 function renderH2HStats() {
   const el = document.getElementById('statsH2H');
-  const pairs = Stats.getAllH2HPairs();
+  const pairs = Stats.getAllH2HPairs(statsMode);
 
   if (pairs.length === 0) {
     el.innerHTML = `
       <div class="empty-state">
         <div class="empty-ic">⚔️</div>
-        <div class="empty-t">상대 전적이 없습니다</div>
-        <div class="empty-d">두 회원이 같은 게임에 참여하면<br>상대 전적이 집계됩니다</div>
+        <div class="empty-t">${statsMode} 상대 전적이 없습니다</div>
+        <div class="empty-d">두 회원이 같은 ${statsMode} 게임에 참여하면<br>상대 전적이 집계됩니다</div>
       </div>
     `;
     return;
@@ -3555,7 +3585,7 @@ function renderH2HStats() {
             <div class="h2h-bar-b" style="width:${pctB}%"></div>
           </div>
         </div>
-        <div class="h2h-meta">${total}게임 · ${a.name} 승률 ${winRateA}%</div>
+        <div class="h2h-meta">${statsMode} ${total}게임 · ${a.name} 승률 ${winRateA}%</div>
       </div>
     `;
   }).join('');
