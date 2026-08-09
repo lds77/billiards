@@ -51,16 +51,22 @@
   }
 
   .screen { display: none; }
-  .screen.active { display: flex; }
+  /* 화면은 항상 뷰포트 높이에 딱 맞추고, 스크롤은 내부 영역이 담당한다.
+     (min-height만 주면 컨테이너가 내용만큼 늘어나 body의 overflow:hidden에 잘려 스크롤이 막힌다) */
+  .screen.active {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
 
   /* ─────────── HOME ─────────── */
   #homeScreen {
-    flex-direction: column;
-    min-height: 100vh;
-    min-height: 100dvh;
     padding: 24px 20px;
     background: radial-gradient(ellipse at 50% 0%, #0f1a20 0%, var(--bg) 60%);
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .home-header { text-align: center; margin-bottom: 28px; margin-top: 16px; }
@@ -219,15 +225,11 @@
   .nav-action-btn:active { transform: scale(0.95); }
 
   /* ─────────── SETUP ─────────── */
-  #setupScreen {
-    flex-direction: column;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow-y: auto;
-  }
   .scroll-body {
     flex: 1;
+    min-height: 0;          /* 이게 없으면 flex 항목이 내용 높이 밑으로 줄지 못해 스크롤이 안 생긴다 */
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     padding: 16px 16px 100px;
   }
 
@@ -463,6 +465,7 @@
 
   .players-area {
     flex: 1;
+    min-height: 0;
     display: grid;
     overflow: hidden;
     gap: 1px;
@@ -990,6 +993,45 @@
   .m-secondary { background: var(--card); border: 1px solid var(--border); color: var(--text); }
   .m-danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
 
+  /* ─────────── DATA / BACKUP ─────────── */
+  .data-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .data-stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 8px;
+    text-align: center;
+  }
+  .data-stat-v {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 24px;
+    color: var(--p1);
+    line-height: 1;
+  }
+  .data-stat-l { font-size: 10px; color: var(--muted); margin-top: 6px; }
+  .data-note { font-size: 11px; color: var(--muted); line-height: 1.6; margin-top: 10px; }
+  .data-btn { width: 100%; margin-bottom: 8px; font-size: 14px; }
+  .data-textarea {
+    width: 100%;
+    min-height: 90px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: monospace;
+    outline: none;
+    resize: vertical;
+    margin-bottom: 8px;
+  }
+  .data-textarea:focus { border-color: var(--p1); }
+
   .confirm-box { text-align: center; }
   .confirm-ic { font-size: 40px; margin-bottom: 10px; }
   .confirm-t { font-size: 17px; font-weight: 500; margin-bottom: 6px; }
@@ -1017,7 +1059,7 @@
     font-size: 22px;
     letter-spacing: 2px;
   }
-  .log-body { flex: 1; overflow-y: auto; padding: 12px 14px; }
+  .log-body { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 14px; }
   .log-entry {
     display: flex;
     align-items: center;
@@ -1049,7 +1091,9 @@
   /* ─────────── MEMBERS / RECORDS / STATS ─────────── */
   .page-body {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     padding: 14px 14px 30px;
   }
 
@@ -1482,6 +1526,20 @@
         <div class="menu-desc">통계 분석</div>
       </div>
     </button>
+    <button class="menu-btn" onclick="openRecordsScreen()">
+      <div class="menu-icon">📋</div>
+      <div>
+        <div class="menu-title">RECORDS</div>
+        <div class="menu-desc">기록실</div>
+      </div>
+    </button>
+    <button class="menu-btn" onclick="openDataScreen()">
+      <div class="menu-icon">💾</div>
+      <div>
+        <div class="menu-title">BACKUP</div>
+        <div class="menu-desc">백업 / 복원</div>
+      </div>
+    </button>
   </div>
 
   <div class="recent-section">
@@ -1653,6 +1711,57 @@
   </div>
 </div>
 
+<!-- ─── DATA / BACKUP ─── -->
+<div class="screen" id="dataScreen">
+  <div class="top-nav">
+    <div class="nav-left">
+      <button class="back-btn" onclick="goScreen('homeScreen'); initHome();">←</button>
+      <div class="nav-title">BACKUP</div>
+    </div>
+  </div>
+  <div class="page-body">
+    <div class="setup-section">
+      <div class="setup-label">현재 저장된 데이터</div>
+      <div class="data-summary" id="dataSummary"></div>
+      <div class="data-note">
+        기록은 이 브라우저 안에만 저장됩니다. 브라우저 데이터 삭제, 기기 변경,
+        장기간 미사용 시 사라질 수 있으니 가끔 내보내 두세요.
+      </div>
+    </div>
+
+    <div class="setup-section">
+      <div class="setup-label">내보내기</div>
+      <button class="m-btn m-primary data-btn" onclick="exportData()">📥 JSON 파일로 저장</button>
+      <button class="m-btn m-secondary data-btn" onclick="copyDataToClipboard()">📋 클립보드로 복사</button>
+      <div class="data-note">파일 저장이 막히는 환경(일부 iOS)에서는 클립보드 복사를 쓰세요.</div>
+    </div>
+
+    <div class="setup-section">
+      <div class="setup-label">불러오기</div>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="handleImportFile(event)">
+      <button class="m-btn m-secondary data-btn" onclick="document.getElementById('importFile').click()">📤 JSON 파일 선택</button>
+      <textarea class="data-textarea" id="importText" placeholder="또는 백업 JSON을 여기에 붙여넣기"></textarea>
+      <button class="m-btn m-secondary data-btn" onclick="importFromTextarea()">붙여넣은 내용 불러오기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import mode confirm -->
+<div class="modal-bg" id="importModal">
+  <div class="modal-box confirm-box">
+    <div class="confirm-ic">📤</div>
+    <div class="confirm-t">백업을 불러옵니다</div>
+    <div class="confirm-d" id="importSummary">-</div>
+    <div class="modal-action-btns">
+      <button class="m-btn m-secondary" onclick="cancelImport()">취소</button>
+      <button class="m-btn m-primary" onclick="applyImport('merge')">합치기</button>
+    </div>
+    <div style="margin-top:8px">
+      <button class="m-btn m-danger" style="width:100%" onclick="applyImport('replace')">기존 데이터 지우고 덮어쓰기</button>
+    </div>
+  </div>
+</div>
+
 <!-- Highrun flash -->
 <div class="hr-flash" id="hrFlash">
   <div class="hr-flash-box" id="hrFlashText">🔥 하이런!</div>
@@ -1681,6 +1790,22 @@
     <div class="modal-action-btns">
       <button class="m-btn m-secondary" onclick="closeModal('exitModal')">계속하기</button>
       <button class="m-btn m-primary" onclick="exitGame()">종료</button>
+    </div>
+  </div>
+</div>
+
+<!-- Unsaved result confirm -->
+<div class="modal-bg" id="unsavedModal">
+  <div class="modal-box confirm-box">
+    <div class="confirm-ic">💾</div>
+    <div class="confirm-t">아직 저장하지 않았습니다</div>
+    <div class="confirm-d">지금 나가면 이 게임 기록이 사라지고<br>통계에도 반영되지 않습니다</div>
+    <div class="modal-action-btns">
+      <button class="m-btn m-secondary" onclick="closeModal('unsavedModal')">돌아가기</button>
+      <button class="m-btn m-primary" onclick="closeModal('unsavedModal'); saveAndExit();">저장 후 종료</button>
+    </div>
+    <div style="margin-top:8px">
+      <button class="m-btn m-danger" style="width:100%" onclick="discardAndExit()">저장 안 하고 종료</button>
     </div>
   </div>
 </div>
@@ -1740,16 +1865,27 @@ const COLOR_GLOWS = [
 ];
 
 const DEFAULT_TARGETS = { '3쿠션': 20, '4구': 50 };
-const MAX_RECORDS = 100;
+const MAX_RECORDS = 2000;
 const MAX_UNDO = 10;
 
 // ─────────────────── 저장소 ───────────────────
 const Storage = {
+  // 저장 실패(용량 초과 등)를 조용히 삼키지 않고 알린다
+  _write(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (e) {
+      showToast('저장 공간이 부족합니다. 데이터를 내보낸 뒤 정리해주세요');
+      return false;
+    }
+  },
+
   getMembers() {
     try { return JSON.parse(localStorage.getItem('billiards_members') || '[]'); }
     catch { return []; }
   },
-  saveMembers(m) { localStorage.setItem('billiards_members', JSON.stringify(m)); },
+  saveMembers(m) { return this._write('billiards_members', JSON.stringify(m)); },
 
   getRecords() {
     try { return JSON.parse(localStorage.getItem('billiards_records') || '[]'); }
@@ -1757,12 +1893,12 @@ const Storage = {
   },
   saveRecords(r) {
     const trimmed = r.slice(-MAX_RECORDS);
-    localStorage.setItem('billiards_records', JSON.stringify(trimmed));
+    return this._write('billiards_records', JSON.stringify(trimmed));
   },
   addRecord(record) {
     const records = this.getRecords();
     records.push(record);
-    this.saveRecords(records);
+    return this.saveRecords(records);
   },
 
   getLive() {
@@ -1770,7 +1906,7 @@ const Storage = {
     catch { return null; }
   },
   saveLive(g) {
-    if (g) localStorage.setItem('billiards_live', JSON.stringify(g));
+    if (g) this._write('billiards_live', JSON.stringify(g));
     else localStorage.removeItem('billiards_live');
   }
 };
@@ -2262,6 +2398,7 @@ const GameState = {
   finished: false,
   finishOrder: [],
   rankedResults: null,
+  recordSaved: false,
 
   start(setup) {
     this.mode = setup.mode;
@@ -2275,6 +2412,7 @@ const GameState = {
     this.undoStack = [];
     this.log = [];
     this.rankedResults = null;
+    this.recordSaved = false;
     this.players = setup.slots.slice(0, setup.count).map((s, i) => ({
       idx: i,
       name: s.name,
@@ -2292,6 +2430,9 @@ const GameState = {
 
   load(data) {
     Object.assign(this, data);
+    // 이어하기로 불러온 게임은 아직 기록되지 않은 상태
+    this.rankedResults = null;
+    this.recordSaved = false;
   },
 
   save() {
@@ -2597,6 +2738,9 @@ function addScore() {
   if (p.score >= p.target && !p.finished) {
     p.finished = true;
     p.finishInning = GameState.inning;
+    // 목표 도달로 끝난 이 이닝도 실제로 친 이닝이므로 카운트한다
+    // (미스로만 innings를 올리면 마지막 이닝이 빠져 AVG가 부풀려짐)
+    p.innings++;
     GameState.finishOrder.push(p.idx);
 
     if (GameState.winRule === 'instant') {
@@ -2630,13 +2774,43 @@ function addScore() {
   Game.render();
 }
 
+// 로그를 되짚어 해당 플레이어의 연속 득점/하이런을 다시 계산한다.
+// −1 수정은 "그 득점이 없었던 것"으로 처리해야 잘못 올라간 하이런이 남지 않는다.
+function replayRuns(idx) {
+  const events = [];
+  GameState.log.forEach(e => {
+    if (e.playerIdx !== idx) return;
+    if (e.type === 'score') {
+      events.push('score');
+    } else if (e.type === 'minus') {
+      // 현재 이닝 안에서 가장 최근 득점을 취소한다 (이전 이닝 기록은 건드리지 않음)
+      for (let i = events.length - 1; i >= 0; i--) {
+        if (events[i] === 'miss') break;
+        if (events[i] === 'score') { events.splice(i, 1); break; }
+      }
+    } else {
+      events.push('miss');
+    }
+  });
+
+  let run = 0, highrun = 0;
+  events.forEach(ev => {
+    if (ev === 'score') {
+      run++;
+      if (run > highrun) highrun = run;
+    } else {
+      run = 0;
+    }
+  });
+  return { run, highrun };
+}
+
 function subScore() {
   if (GameState.finished) return;
   const p = GameState.players[GameState.currentIdx];
   if (p.finished || p.score <= 0) return;
   GameState.pushUndo();
   p.score--;
-  p.currentRun = Math.max(0, p.currentRun - 1);
   GameState.log.push({
     type: 'minus',
     inning: GameState.inning,
@@ -2644,6 +2818,10 @@ function subScore() {
     name: p.name,
     score: p.score
   });
+  // 오입력으로 올라간 하이런이 남지 않도록 로그 기준으로 재계산
+  const runs = replayRuns(GameState.currentIdx);
+  p.currentRun = runs.run;
+  p.highrun = runs.highrun;
   GameState.save();
   Game.render();
 }
@@ -2731,6 +2909,7 @@ function showResultModal() {
 function closeResult() { closeModal('resultModal'); }
 
 function saveAndExit() {
+  if (GameState.recordSaved) { exitGame(); return; }
   stopTurnTimer();
   releaseWakeLock();
   document.getElementById('timerDisplay').style.display = 'none';
@@ -2752,7 +2931,8 @@ function saveAndExit() {
       rank: p.rank
     }))
   };
-  Storage.addRecord(record);
+  if (!Storage.addRecord(record)) return;  // 저장 실패 시 화면에 남겨둔다
+  GameState.recordSaved = true;
   Storage.saveLive(null);
   closeModal('resultModal');
   goScreen('homeScreen');
@@ -2761,11 +2941,21 @@ function saveAndExit() {
 }
 
 function confirmExit() {
+  // 게임이 끝났는데 아직 기록을 저장하지 않았다면 그냥 나가지 못하게 막는다
+  if (GameState.finished && !GameState.recordSaved) {
+    document.getElementById('unsavedModal').classList.add('show');
+    return;
+  }
   if (GameState.finished) {
     exitGame();
     return;
   }
   document.getElementById('exitModal').classList.add('show');
+}
+
+function discardAndExit() {
+  closeModal('unsavedModal');
+  exitGame();
 }
 function exitGame() {
   stopTurnTimer();
@@ -2859,7 +3049,7 @@ function addMember() {
     name: name,
     createdAt: Date.now()
   });
-  Storage.saveMembers(members);
+  if (!Storage.saveMembers(members)) return;
   input.value = '';
   renderMembers();
   showToast(`${name} 회원이 추가되었습니다`);
@@ -3150,6 +3340,186 @@ function renderH2HStats() {
       </div>
     `;
   }).join('');
+}
+
+// ─────────────────── 백업 / 복원 ───────────────────
+const BACKUP_APP_ID = 'billiards-scoreboard';
+
+function openDataScreen() {
+  goScreen('dataScreen');
+  document.getElementById('importText').value = '';
+  renderDataSummary();
+}
+
+function buildBackup() {
+  return {
+    app: BACKUP_APP_ID,
+    version: 1,
+    exportedAt: Date.now(),
+    members: Storage.getMembers(),
+    records: Storage.getRecords()
+  };
+}
+
+function renderDataSummary() {
+  const backup = buildBackup();
+  const bytes = new Blob([JSON.stringify(backup)]).size;
+  const size = bytes < 1024 ? `${bytes}B` : `${(bytes / 1024).toFixed(1)}KB`;
+  document.getElementById('dataSummary').innerHTML = `
+    <div class="data-stat">
+      <div class="data-stat-v">${backup.members.length}</div>
+      <div class="data-stat-l">회원</div>
+    </div>
+    <div class="data-stat">
+      <div class="data-stat-v">${backup.records.length}</div>
+      <div class="data-stat-l">게임 기록</div>
+    </div>
+    <div class="data-stat">
+      <div class="data-stat-v">${size}</div>
+      <div class="data-stat-l">용량</div>
+    </div>
+  `;
+}
+
+function backupFileName() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `billiards-backup-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.json`;
+}
+
+function exportData() {
+  const json = JSON.stringify(buildBackup(), null, 2);
+  try {
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = backupFileName();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('백업 파일을 저장했습니다');
+  } catch (e) {
+    showToast('파일 저장에 실패했습니다. 클립보드 복사를 이용해주세요');
+  }
+}
+
+async function copyDataToClipboard() {
+  const json = JSON.stringify(buildBackup());
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(json);
+    } else {
+      // file:// 등 비보안 컨텍스트 대비 폴백
+      const ta = document.createElement('textarea');
+      ta.value = json;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      if (!ok) throw new Error('execCommand failed');
+    }
+    showToast('백업 데이터를 복사했습니다');
+  } catch (e) {
+    showToast('복사에 실패했습니다');
+  }
+}
+
+let pendingImport = null;
+
+function stageImport(text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    showToast('올바른 JSON 형식이 아닙니다');
+    return;
+  }
+  if (!data || typeof data !== 'object' ||
+      (!Array.isArray(data.members) && !Array.isArray(data.records))) {
+    showToast('이 앱의 백업 파일이 아닙니다');
+    return;
+  }
+  pendingImport = {
+    members: Array.isArray(data.members) ? data.members : [],
+    records: Array.isArray(data.records) ? data.records : []
+  };
+  const when = data.exportedAt ? formatDate(data.exportedAt) : '날짜 미상';
+  document.getElementById('importSummary').innerHTML =
+    `${when} 백업<br>회원 ${pendingImport.members.length}명 · 기록 ${pendingImport.records.length}건`;
+  document.getElementById('importModal').classList.add('show');
+}
+
+function handleImportFile(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => stageImport(String(reader.result));
+  reader.onerror = () => showToast('파일을 읽지 못했습니다');
+  reader.readAsText(file);
+  e.target.value = '';  // 같은 파일 다시 선택 가능하도록
+}
+
+function importFromTextarea() {
+  const text = document.getElementById('importText').value.trim();
+  if (!text) { showToast('붙여넣은 내용이 없습니다'); return; }
+  stageImport(text);
+}
+
+function cancelImport() {
+  pendingImport = null;
+  closeModal('importModal');
+}
+
+function applyImport(mode) {
+  if (!pendingImport) return;
+  const { members: inMembers, records: inRecords } = pendingImport;
+
+  if (mode === 'replace') {
+    Storage.saveMembers(inMembers);
+    Storage.saveRecords([...inRecords].sort((a, b) => (a.date || 0) - (b.date || 0)));
+  } else {
+    const members = Storage.getMembers();
+    const byId = new Map(members.map(m => [m.id, m]));
+    const byName = new Map(members.map(m => [m.name, m]));
+    const idMap = {};  // 같은 이름이 이미 있으면 기존 회원으로 연결해 통계를 잇는다
+
+    inMembers.forEach(m => {
+      if (!m || !m.id || !m.name) return;
+      if (byId.has(m.id)) return;
+      const sameName = byName.get(m.name);
+      if (sameName) { idMap[m.id] = sameName.id; return; }
+      members.push(m);
+      byId.set(m.id, m);
+      byName.set(m.name, m);
+    });
+
+    const records = Storage.getRecords();
+    const recIds = new Set(records.map(r => r.id));
+    inRecords.forEach(r => {
+      if (!r || !r.id || recIds.has(r.id)) return;
+      const copy = { ...r };
+      if (Array.isArray(copy.players)) {
+        copy.players = copy.players.map(p =>
+          p.memberId && idMap[p.memberId] ? { ...p, memberId: idMap[p.memberId] } : p
+        );
+      }
+      records.push(copy);
+      recIds.add(copy.id);
+    });
+
+    Storage.saveMembers(members);
+    Storage.saveRecords(records.sort((a, b) => (a.date || 0) - (b.date || 0)));
+  }
+
+  pendingImport = null;
+  closeModal('importModal');
+  document.getElementById('importText').value = '';
+  renderDataSummary();
+  showToast(mode === 'replace' ? '데이터를 덮어썼습니다' : '데이터를 합쳤습니다');
 }
 
 // ─────────────────── Wake Lock ───────────────────
