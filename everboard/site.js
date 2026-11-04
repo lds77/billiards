@@ -40,7 +40,7 @@ const tour = {
   },
   share: {
     file: 'share-card',
-    alt: '경기 기록을 공유하기 위한 실제 성적표 이미지.',
+    alt: '한 판의 경기 결과를 공유하기 위한 실제 결과 카드 이미지.',
     caption: '기록 공유 · 실제 앱 화면\n경기 기록을 이미지로 만들어 함께 나눠보세요.',
   },
 };
@@ -56,3 +56,19 @@ document.querySelectorAll('[data-tour]').forEach(button => {
     caption.textContent = item.caption;
   });
 });
+
+const calc = document.querySelector('#avg-calc');
+if (calc) {
+  // 앱과 같은 셈이다: 3쿠션은 소수 셋째 자리, 4구는 10점을 1개로 세어 소수 둘째 자리.
+  const update = () => {
+    const score = Number(calc.elements.score.value);
+    const innings = Number(calc.elements.innings.value);
+    const valid = Number.isFinite(score) && score >= 0 && innings > 0;
+    const fourBall = calc.elements.kind.value === '4b';
+    calc.elements.result.value = !valid ? '-'
+      : fourBall ? `${(Math.round(score / innings / 10 * 100) / 100).toFixed(2)}개`
+      : (Math.round(score / innings * 1000) / 1000).toFixed(3);
+  };
+  calc.addEventListener('input', update);
+  calc.addEventListener('submit', event => event.preventDefault());
+}
