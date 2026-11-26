@@ -210,3 +210,7 @@ details p a{text-decoration:underline;text-underline-offset:4px;color:var(--gree
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}}
 @media print{.site-header,.site-footer,.article-toc,.related,.download,.skip-link{display:none}.wrap{width:100%}.article-layout{display:block}.article-body{max-width:none}.article-header{padding-top:0}.article-body>section{break-inside:avoid}body{background:#fff;color:#000}a{text-decoration:underline}details>p{display:block}img{max-height:400px;width:auto}}
+
+/* 카톡으로 받은 파일 여는 순서 — 사진 세 장 (2026-11-26) */
+.phone-steps{display:grid;grid-template-columns:repeat(3,minmax(0,200px));gap:22px;margin-block:26px 10px}.phone-steps img{width:100%;height:auto;border-radius:14px;border:1px solid var(--line)}.phone-steps figcaption{margin-top:10px;font-size:14px;line-height:1.45}.phone-steps figcaption b{display:inline-grid;place-items:center;width:22px;height:22px;margin-right:7px;border-radius:50%;background:var(--green);color:var(--white);font-size:12px;vertical-align:1px}.phone-steps-note{font-size:13px;color:var(--muted)}
+@media(max-width:640px){.phone-steps{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:64%;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px;-webkit-overflow-scrolling:touch}.phone-steps figure{scroll-snap-align:start}.phone-steps figcaption{font-size:13px}}
